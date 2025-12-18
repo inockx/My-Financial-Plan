@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#f3f4f6">
+    <title>My Money Plan</title>
+
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon.png">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <style>
+        /* iOS-like Smoothness & Fonts */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+            min-height: 100vh;
+            background-color: #f3f4f6;
+        }
+
+        /* --- DYNAMIC THEME VARIABLES --- */
+        :root {
+            /* Main Theme (Default: Blue) */
+            --theme-main: #2563eb;   /* 600 */
+            --theme-light: #3b82f6;  /* 500 */
+            --theme-dark: #1d4ed8;   /* 700 */
+            --theme-shadow: #bfdbfe; /* 200 */
+            --theme-faint: #dbeafe;  /* 100 */
+
+            /* Semantic Colors (Income/Expense) */
+            --color-income: #16a34a;    /* green-600 */
+            --color-income-bg: #dcfce7; /* green-100 */
+            --color-expense: #ef4444;   /* red-500 */
+            --color-expense-bg: #fee2e2;/* red-100 */
+        }
+        
+        /* Card Styling */
+        .ios-card {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.03);
+            border: 1px solid rgba(0,0,0,0.02);
+        }
+
+        /* Hiding Scrollbars */
+        .scroll-hide::-webkit-scrollbar { display: none; }
+        .scroll-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* Bottom Navigation Active State */
+        .nav-item { transition: color 0.2s ease; }
+        .nav-item.active { color: var(--theme-main); }
+        .nav-item.active i { font-weight: bold; }
+
+        /* Animations */
+        @keyframes slide-up { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .animate-slide-up { animation: slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+
+        @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+        .animate-fade-in { animation: fade-in 0.2s ease-out; }
+        
+        @keyframes pop-in { from { transform: translate(-50%, -50%) scale(0.95); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+        .animate-pop-in { animation: pop-in 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
+
+        /* Safe Area Spacing */
+        .safe-top { padding-top: max(12px, env(safe-area-inset-top)); }
+        .safe-bottom { padding-bottom: max(80px, env(safe-area-inset-bottom)); }
+        .safe-pb { padding-bottom: env(safe-area-inset-bottom); }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden text-gray-800">
+
+    <header class="bg-white px-6 pb-4 shadow-sm z-10 safe-top flex-none">
+        <div class="flex justify-between items-center mt-2">
+            <div>
+                <h1 id="appTitleDisplay" class="text-2xl font-extrabold tracking-tight text-gray-900">Money Plan</h1>
+                <p class="text-xs font-medium text-gray-500 uppercase tracking-wide" id="currentDateDisplay">Loading...</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <button onclick="openSettings()" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
+                    <i class="ph ph-gear text-xl"></i>
+                </button>
+                <button onclick="triggerClearMonth()" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-red-50 text-gray-400 hover:text-[var(--color-expense)] transition-colors">
+                    <i class="ph ph-trash text-xl"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main id="mainContainer" class="flex-1 overflow-y-auto scroll-hide p-4 safe-bottom space-y-6">
+        
+        <div id="view-dashboard" class="space-y-6 animate-fade-in">
+            
+            <div class="ios-card p-6 text-white shadow-xl" style="background: linear-gradient(to bottom right, var(--theme-main), var(--theme-light)); box-shadow: 0 10px 25px -5px var(--theme-shadow);">
+                <div class="flex justify-between items-center mb-4">
+                    <p class="text-white/80 text-xs font-semibold uppercase tracking-wider">This Month Leftover</p>
+                    <select id="monthSelector" onchange="changeMonth()" class="text-white text-sm font-medium rounded-lg px-3 py-1.5 border-none focus:ring-0 cursor-pointer transition-colors backdrop-blur-sm" style="background-color: rgba(0,0,0,0.2);">
+                        </select>
+                </div>
+
+                <h2 class="text-4xl font-bold mb-6 tracking-tight" id="dashLeftover">0</h2>
+
+                <div class="grid grid-cols-2 gap-4 pb-4 border-b border-white/20">
+                    <div>
+                        <div class="flex items-center gap-1 text-white/90 mb-1">
+                            <i class="ph ph-arrow-circle-down text-lg"></i>
+                            <span class="text-xs font-medium">Income</span>
+                        </div>
+                        <p class="font-bold text-lg" id="dashIncome">0</p>
+                    </div>
+                    <div class="text-right">
+                        <div class="flex items-center justify-end gap-1 text-white/90 mb-1">
+                            <span class="text-xs font-medium">Fixed Costs</span>
+                            <i class="ph ph-arrow-circle-up text-lg"></i>
+                        </div>
+                        <p class="font-bold text-lg" id="dashExpenses">0</p>
+                    </div>
+                </div>
+
+                <div class="pt-4 flex justify-between items-center">
+                    <span class="text-white/90 text-sm font-medium">Total Balance (All Time)</span>
+                    <span class="text-white font-bold text-xl" id="dashTotalBalance">0</span>
+                </div>
+            </div>
+
+            <div class="ios-card p-5">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-sm font-bold text-gray-900 flex items-center gap-2">
+                        <i class="ph ph-chart-bar" style="color: var(--theme-light)"></i> Trend
+                    </h3>
+                    
+                    <div class="flex gap-2">
+                        <select id="chartFilterRange" onchange="renderChart()" class="bg-gray-100 text-xs font-medium rounded-lg px-2 py-1 border-none outline-none text-gray-700 focus:ring-2" style="--tw-ring-color: var(--theme-main);">
+                            </select>
+                        <select id="chartFilterType" onchange="renderChart()" class="bg-gray-100 text-xs font-medium rounded-lg px-2 py-1 border-none outline-none text-gray-700 focus:ring-2" style="--tw-ring-color: var(--theme-main);">
+                            <option value="both">Both</option>
+                            <option value="income">Income</option>
+                            <option value="expense">Expense</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="h-48 relative w-full">
+                    <canvas id="trendChart"></canvas>
+                </div>
+            </div>
+
+            <div>
+                <div class="flex justify-between items-center mb-3 px-1">
+                    <h3 class="text-gray-900 font-bold text-lg">Top Expenses</h3>
+                    <button onclick="switchTab('list')" class="text-sm font-medium hover:bg-gray-50 px-2 py-1 rounded-lg transition-colors" style="color: var(--theme-main);">See All</button>
+                </div>
+                <div id="dashboardList" class="space-y-3">
+                    </div>
+            </div>
+        </div>
+
+        <div id="view-list" class="hidden space-y-4 animate-fade-in">
+            <div class="sticky top-0 bg-[#f3f4f6] z-10 pt-2 pb-2 space-y-3">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-2xl font-bold text-gray-900">Records</h2>
+                    <button onclick="openModal()" class="text-white px-4 py-2 rounded-full text-sm font-bold shadow-lg active:scale-95 transition-all flex items-center gap-2" style="background-color: var(--theme-main); box-shadow: 0 4px 6px -1px var(--theme-shadow);">
+                        <i class="ph ph-plus-bold"></i> Add New
+                    </button>
+                </div>
+                
+                <div class="relative">
+                    <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg"></i>
+                    <input type="text" id="searchInput" placeholder="Search transactions..."
+                           class="w-full bg-white border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-sm outline-none text-gray-700 font-medium shadow-sm transition-shadow focus:ring-2"
+                           style="--tw-ring-color: var(--theme-main);"
+                           oninput="renderList()">
+                </div>
+
+                <div class="flex gap-3">
+                    <div class="flex-1">
+                        <label class="sr-only">Date</label>
+                        <input type="month" id="filterDate" class="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none text-gray-700 font-medium focus:ring-2" style="--tw-ring-color: var(--theme-main);" onchange="applyListFilters()">
+                    </div>
+                    <div class="flex-1">
+                        <label class="sr-only">Type</label>
+                        <select id="filterType" class="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none text-gray-700 font-medium appearance-none focus:ring-2" style="--tw-ring-color: var(--theme-main);" onchange="applyListFilters()">
+                            <option value="all">All Types</option>
+                            <option value="income">Income Only</option>
+                            <option value="expense">Expenses Only</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="fullList" class="space-y-2 pb-20">
+                </div>
+        </div>
+
+    </main>
+
+    <nav class="bg-white/90 backdrop-blur-md border-t border-gray-200 flex justify-around items-center pt-3 fixed bottom-0 w-full z-20 safe-pb">
+        <button onclick="switchTab('dashboard')" class="nav-item active flex flex-col items-center w-full py-2 text-gray-400" id="nav-dash">
+            <i class="ph ph-chart-pie-slice text-2xl mb-1"></i>
+            <span class="text-[10px] font-semibold">Overview</span>
+        </button>
+        <button onclick="switchTab('list')" class="nav-item flex flex-col items-center w-full py-2 text-gray-400" id="nav-list">
+            <i class="ph ph-list-dashes text-2xl mb-1"></i>
+            <span class="text-[10px] font-semibold">Records</span>
+        </button>
+    </nav>
+
+    <div id="settingsModal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onclick="closeSettings()"></div>
+        <div class="absolute bottom-0 sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 w-full sm:w-96 bg-white rounded-t-3xl sm:rounded-3xl p-6 animate-slide-up shadow-2xl">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-bold text-gray-900">App Settings</h3>
+                <button onclick="closeSettings()" class="bg-gray-100 p-2 rounded-full text-gray-500 hover:bg-gray-200 transition-colors">
+                    <i class="ph ph-x text-lg"></i>
+                </button>
+            </div>
+            
+            <form onsubmit="saveSettings(event)" class="space-y-6">
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-2 ml-1">App Title</label>
+                    <input type="text" id="settingsTitle" placeholder="Money Plan" class="w-full bg-gray-50 border border-gray-200 rounded-2xl p-4 outline-none transition-all font-medium text-gray-800 focus:ring-2" style="--tw-ring-color: var(--theme-main);">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-3 ml-1">Theme Color</label>
+                    <div class="grid grid-cols-6 gap-3" id="themeSelectorGrid">
+                        </div>
+                </div>
+
+                <button type="submit" class="w-full text-white font-bold py-4 rounded-xl active:scale-95 transition-transform shadow-lg flex items-center justify-center gap-2" style="background-color: var(--theme-main); box-shadow: 0 4px 6px -1px var(--theme-shadow);">
+                    <i class="ph ph-check-circle text-lg"></i> Save Settings
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div id="modal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onclick="closeModal()"></div>
+        <div class="absolute bottom-0 sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 w-full sm:w-96 bg-white rounded-t-3xl sm:rounded-3xl p-6 animate-slide-up shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-bold text-gray-900" id="modalTitle">Edit Record</h3>
+                <button onclick="closeModal()" class="bg-gray-100 p-2 rounded-full text-gray-500 hover:bg-gray-200 transition-colors">
+                    <i class="ph ph-x text-lg"></i>
+                </button>
+            </div>
+            
+            <form onsubmit="saveTransaction(event)" class="space-y-4">
+                <input type="hidden" id="editId">
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="col-span-2">
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Date (Month)</label>
+                        <input type="month" id="inputDate" required class="w-full bg-gray-50 border border-gray-200 rounded-2xl p-4 outline-none transition-all font-medium text-gray-800 focus:ring-2" style="--tw-ring-color: var(--theme-main);">
+                    </div>
+                    
+                    <div class="col-span-2">
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Name / Description</label>
+                        <input type="text" id="inputDesc" list="descSuggestions" placeholder="e.g. Grocery" required 
+                               class="w-full bg-gray-50 border border-gray-200 rounded-2xl p-4 outline-none transition-all font-medium placeholder-gray-400 focus:ring-2"
+                               style="--tw-ring-color: var(--theme-main);"
+                               oninput="autoFillCategory(this)">
+                        <datalist id="descSuggestions">
+                            </datalist>
+                    </div>
+                    
+                    <div class="col-span-2">
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Category</label>
+                        <input type="text" id="inputCategory" placeholder="e.g. Food, Utilities" class="w-full bg-gray-50 border border-gray-200 rounded-2xl p-4 outline-none transition-all font-medium placeholder-gray-400 focus:ring-2" style="--tw-ring-color: var(--theme-main);">
+                    </div>
+
+                    <div class="col-span-2 bg-gray-50 p-3 rounded-2xl border border-dashed border-gray-300">
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-2 ml-1">Period (Optional)</label>
+                        <div class="flex items-center gap-2">
+                            <input type="number" id="inputInstCurrent" placeholder="1" min="1" class="w-full bg-white border border-gray-200 rounded-xl p-3 outline-none text-center font-bold focus:ring-2" style="--tw-ring-color: var(--theme-main);">
+                            <span class="text-gray-400 text-sm font-bold">OF</span>
+                            <input type="number" id="inputInstTotal" placeholder="Total" min="1" class="w-full bg-white border border-gray-200 rounded-xl p-3 outline-none text-center font-bold focus:ring-2" style="--tw-ring-color: var(--theme-main);">
+                        </div>
+                        <p class="text-[10px] text-gray-500 mt-2 ml-1 hidden" id="autoGenHint">
+                            <i class="ph ph-magic-wand" style="color: var(--theme-main);"></i> Will generate <span id="genCount">0</span> future records automatically.
+                        </p>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Amount</label>
+                        <input type="number" id="inputAmount" placeholder="0" required class="w-full bg-gray-50 border border-gray-200 rounded-2xl p-4 outline-none transition-all font-medium placeholder-gray-400 focus:ring-2" style="--tw-ring-color: var(--theme-main);">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Type</label>
+                        <select id="inputType" class="w-full bg-gray-50 border border-gray-200 rounded-2xl p-4 outline-none transition-all font-medium appearance-none focus:ring-2" style="--tw-ring-color: var(--theme-main);">
+                            <option value="expense">Expense</option>
+                            <option value="income">Income</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="flex gap-3 pt-2">
+                    <button type="button" id="deleteBtn" onclick="triggerDelete()" class="hidden flex-1 bg-red-100 font-bold py-4 rounded-xl active:scale-95 transition-transform hover:bg-red-200 flex items-center justify-center gap-2" style="color: var(--color-expense);">
+                        <i class="ph ph-trash text-lg"></i> Delete
+                    </button>
+                    <button type="submit" class="flex-[2] text-white font-bold py-4 rounded-xl active:scale-95 transition-transform shadow-lg flex items-center justify-center gap-2" style="background-color: var(--theme-main); box-shadow: 0 4px 6px -1px var(--theme-shadow);">
+                        <i class="ph ph-check-circle text-lg"></i> Save
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="confirmModal" class="fixed inset-0 z-[60] hidden">
+        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity"></div>
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl p-6 w-80 shadow-2xl animate-pop-in text-center">
+            <div class="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4" style="color: var(--color-expense);">
+                <i class="ph ph-warning-octagon text-2xl"></i>
+            </div>
+            <h3 class="text-lg font-bold text-gray-900 mb-2">Are you sure?</h3>
+            <p class="text-sm text-gray-500 mb-6" id="confirmMessage">This action cannot be undone.</p>
+            <div class="flex gap-3">
+                <button onclick="closeConfirmModal()" class="flex-1 py-3 text-gray-600 font-bold bg-gray-100 rounded-xl hover:bg-gray-200 active:scale-95 transition-transform">Cancel</button>
+                <button id="confirmBtnAction" class="flex-1 py-3 text-white font-bold rounded-xl hover:opacity-90 shadow-lg shadow-red-200 active:scale-95 transition-transform" style="background-color: var(--color-expense);">Yes, Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="fixed top-6 left-1/2 -translate-x-1/2 bg-gray-900/90 backdrop-blur text-white px-6 py-3 rounded-full text-sm font-medium shadow-xl transform -translate-y-24 transition-all duration-500 z-[70] flex items-center gap-2">
+        <i class="ph ph-check-circle text-green-400 text-lg"></i>
+        <span>Saved successfully!</span>
+    </div>
+
+    <script>
+        // --- DATA INITIALIZATION ---
+        const INITIAL_DATA = [
+            // --- DEC 2025 ---
+            { id: 1001, date: '2025-12', desc: 'Leftover (Brought Forward)', amount: 7500, type: 'income', category: 'Balance' },
+            { id: 1002, date: '2025-12', desc: 'Salary', amount: 31000, type: 'income', category: 'Salary' },
+            { id: 1003, date: '2025-12', desc: 'Loan', amount: 50000, type: 'income', category: 'Loan' },
+            { id: 1004, date: '2025-12', desc: 'Cash Plus 15k', amount: 546, type: 'expense', category: 'Loan' },
+            { id: 1005, date: '2025-12', desc: 'Cash Plus 20k', amount: 617, type: 'expense', category: 'Loan' },
+            { id: 1006, date: '2025-12', desc: 'Ford Battery', amount: 1000, type: 'expense', category: 'Car' },
+            { id: 1007, date: '2025-12', desc: 'Car Fixing', amount: 2500, type: 'expense', category: 'Car', instCurrent: 7, instTotal: 10 },
+            { id: 1008, date: '2025-12', desc: 'Air Con', amount: 950, type: 'expense', category: 'Car', instCurrent: 6, instTotal: 10 },
+            { id: 1009, date: '2025-12', desc: 'Taiwan', amount: 800, type: 'expense', category: 'Travel', instCurrent: 9, instTotal: 10 },
+            { id: 1010, date: '2025-12', desc: 'Credit Card', amount: 14000, type: 'expense', category: 'Credit' },
+            { id: 1011, date: '2025-12', desc: 'Car Accessories', amount: 2500, type: 'expense', category: 'Car' },
+            { id: 1012, date: '2025-12', desc: 'Car Deposit', amount: 34500, type: 'expense', category: 'Car' },
+            { id: 1013, date: '2025-12', desc: 'Lifetime Warranty', amount: 5000, type: 'expense', category: 'Car' },
+            { id: 1014, date: '2025-12', desc: 'Home Charger', amount: 1200, type: 'expense', category: 'Car', instCurrent: 1, instTotal: 10 },
+
+            // --- JAN 2026 ---
+            { id: 2001, date: '2026-01', desc: 'Salary', amount: 31000, type: 'income', category: 'Salary' },
+            { id: 2002, date: '2026-01', desc: 'Cash Plus 15k', amount: 546, type: 'expense', category: 'Loan' },
+            { id: 2003, date: '2026-01', desc: 'Cash Plus 20k', amount: 617, type: 'expense', category: 'Loan' },
+            { id: 2004, date: '2026-01', desc: 'Car Fixing', amount: 1300, type: 'expense', category: 'Car', instCurrent: 8, instTotal: 10 },
+            { id: 2005, date: '2026-01', desc: 'Air Con', amount: 950, type: 'expense', category: 'Car', instCurrent: 7, instTotal: 10 },
+            { id: 2006, date: '2026-01', desc: 'Car Deposit', amount: 1100, type: 'expense', category: 'Car', instCurrent: 1, instTotal: 10 },
+            { id: 2007, date: '2026-01', desc: 'Taiwan', amount: 800, type: 'expense', category: 'Travel', instCurrent: 10, instTotal: 10 },
+            { id: 2008, date: '2026-01', desc: 'Cash Plus 50k', amount: 2700, type: 'expense', category: 'Loan', instCurrent: 1, instTotal: 24 },
+            { id: 2009, date: '2026-01', desc: 'Fuel', amount: 1800, type: 'expense', category: 'Car' },
+            { id: 2010, date: '2026-01', desc: 'Motorway', amount: 1200, type: 'expense', category: 'Car' },
+            { id: 2011, date: '2026-01', desc: 'Eating', amount: 8000, type: 'expense', category: 'Food' },
+            { id: 2012, date: '2026-01', desc: 'SAE', amount: 5000, type: 'expense', category: 'Misc' },
+            { id: 2013, date: '2026-01', desc: 'Home Charger', amount: 1200, type: 'expense', category: 'Car', instCurrent: 2, instTotal: 10 },
+
+             // --- FEB 2026 ---
+            { id: 3001, date: '2026-02', desc: 'Salary', amount: 31000, type: 'income', category: 'Salary' },
+            { id: 3002, date: '2026-02', desc: 'Cash Plus 15k', amount: 546, type: 'expense', category: 'Loan' },
+            { id: 3003, date: '2026-02', desc: 'Cash Plus 20k', amount: 617, type: 'expense', category: 'Loan' },
+            { id: 3004, date: '2026-02', desc: 'Car Fixing', amount: 1300, type: 'expense', category: 'Car', instCurrent: 9, instTotal: 10 },
+            { id: 3005, date: '2026-02', desc: 'Air Con', amount: 950, type: 'expense', category: 'Car', instCurrent: 8, instTotal: 10 },
+            { id: 3006, date: '2026-02', desc: 'Car Deposit', amount: 1100, type: 'expense', category: 'Car', instCurrent: 2, instTotal: 10 },
+            { id: 3007, date: '2026-02', desc: 'Cash Plus 50k', amount: 2700, type: 'expense', category: 'Loan', instCurrent: 2, instTotal: 24 },
+            { id: 3008, date: '2026-02', desc: 'Seal', amount: 14484, type: 'expense', category: 'Car', instCurrent: 1, instTotal: 72 },
+            { id: 3009, date: '2026-02', desc: 'Fuel', amount: 1800, type: 'expense', category: 'Car' },
+            { id: 3010, date: '2026-02', desc: 'Motorway', amount: 1200, type: 'expense', category: 'Car' },
+            { id: 3011, date: '2026-02', desc: 'Eating', amount: 8000, type: 'expense', category: 'Food' },
+            { id: 3012, date: '2026-02', desc: 'SAE', amount: 5000, type: 'expense', category: 'Misc' },
+            { id: 3013, date: '2026-02', desc: 'Home Charger', amount: 1200, type: 'expense', category: 'Car', instCurrent: 3, instTotal: 10 },
+
+            // --- MAR 2026 ---
+            { id: 4001, date: '2026-03', desc: 'Salary', amount: 31000, type: 'income', category: 'Salary' },
+            { id: 4002, date: '2026-03', desc: 'Cash Plus 15k', amount: 546, type: 'expense', category: 'Loan' },
+            { id: 4003, date: '2026-03', desc: 'Cash Plus 20k', amount: 617, type: 'expense', category: 'Loan' },
+            { id: 4004, date: '2026-03', desc: 'Car Fixing', amount: 1300, type: 'expense', category: 'Car', instCurrent: 10, instTotal: 10 },
+            { id: 4005, date: '2026-03', desc: 'Air Con', amount: 950, type: 'expense', category: 'Car', instCurrent: 9, instTotal: 10 },
+            { id: 4006, date: '2026-03', desc: 'Car Deposit', amount: 1100, type: 'expense', category: 'Car', instCurrent: 3, instTotal: 10 },
+            { id: 4007, date: '2026-03', desc: 'Cash Plus 50k', amount: 2700, type: 'expense', category: 'Loan', instCurrent: 3, instTotal: 24 },
+            { id: 4008, date: '2026-03', desc: 'Seal', amount: 14484, type: 'expense', category: 'Car', instCurrent: 2, instTotal: 72 },
+            { id: 4009, date: '2026-03', desc: 'Fuel', amount: 1800, type: 'expense', category: 'Car' },
+            { id: 4010, date: '2026-03', desc: 'Motorway', amount: 1200, type: 'expense', category: 'Car' },
+            { id: 4011, date: '2026-03', desc: 'Eating', amount: 8000, type: 'expense', category: 'Food' },
+            { id: 4012, date: '2026-03', desc: 'SAE', amount: 5000, type: 'expense', category: 'Misc' },
+            { id: 4013, date: '2026-03', desc: 'Home Charger', amount: 1200, type: 'expense', category: 'Car', instCurrent: 4, instTotal: 10 },
+
+            // --- APR 2026 ---
+            { id: 5001, date: '2026-04', desc: 'Salary', amount: 31000, type: 'income', category: 'Salary' },
+            { id: 5002, date: '2026-04', desc: 'Cash Plus 15k', amount: 546, type: 'expense', category: 'Loan' },
+            { id: 5003, date: '2026-04', desc: 'Cash Plus 20k', amount: 617, type: 'expense', category: 'Loan' },
+            { id: 5004, date: '2026-04', desc: 'Air Con', amount: 950, type: 'expense', category: 'Car', instCurrent: 10, instTotal: 10 },
+            { id: 5005, date: '2026-04', desc: 'Car Deposit', amount: 1100, type: 'expense', category: 'Car', instCurrent: 4, instTotal: 10 },
+            { id: 5006, date: '2026-04', desc: 'Cash Plus 50k', amount: 2700, type: 'expense', category: 'Loan', instCurrent: 4, instTotal: 24 },
+            { id: 5007, date: '2026-04', desc: 'Seal', amount: 14484, type: 'expense', category: 'Car', instCurrent: 3, instTotal: 72 },
+            { id: 5008, date: '2026-04', desc: 'Fuel', amount: 1800, type: 'expense', category: 'Car' },
+            { id: 5009, date: '2026-04', desc: 'Motorway', amount: 1200, type: 'expense', category: 'Car' },
+            { id: 5010, date: '2026-04', desc: 'Eating', amount: 8000, type: 'expense', category: 'Food' },
+            { id: 5011, date: '2026-04', desc: 'Home Charger', amount: 1200, type: 'expense', category: 'Car', instCurrent: 5, instTotal: 10 },
+
+            // --- MAY 2026 ---
+            { id: 6001, date: '2026-05', desc: 'Salary', amount: 31000, type: 'income', category: 'Salary' },
+            { id: 6002, date: '2026-05', desc: 'Cash Plus 15k', amount: 546, type: 'expense', category: 'Loan' },
+            { id: 6003, date: '2026-05', desc: 'Cash Plus 20k', amount: 617, type: 'expense', category: 'Loan' },
+            { id: 6004, date: '2026-05', desc: 'Car Deposit', amount: 1100, type: 'expense', category: 'Car', instCurrent: 5, instTotal: 10 },
+            { id: 6005, date: '2026-05', desc: 'Cash Plus 50k', amount: 2700, type: 'expense', category: 'Loan', instCurrent: 5, instTotal: 24 },
+            { id: 6006, date: '2026-05', desc: 'Seal', amount: 14484, type: 'expense', category: 'Car', instCurrent: 4, instTotal: 72 },
+            { id: 6007, date: '2026-05', desc: 'Fuel', amount: 1800, type: 'expense', category: 'Car' },
+            { id: 6008, date: '2026-05', desc: 'Motorway', amount: 1200, type: 'expense', category: 'Car' },
+            { id: 6009, date: '2026-05', desc: 'Home Charger', amount: 1200, type: 'expense', category: 'Car', instCurrent: 6, instTotal: 10 },
+
+            // --- JUN 2026 ---
+            { id: 7001, date: '2026-06', desc: 'Salary', amount: 31000, type: 'income', category: 'Salary' },
+            { id: 7002, date: '2026-06', desc: 'Cash Plus 15k', amount: 546, type: 'expense', category: 'Loan' },
+            { id: 7003, date: '2026-06', desc: 'Cash Plus 20k', amount: 617, type: 'expense', category: 'Loan' },
+            { id: 7004, date: '2026-06', desc: 'Car Deposit', amount: 1100, type: 'expense', category: 'Car', instCurrent: 6, instTotal: 10 },
+            { id: 7005, date: '2026-06', desc: 'Cash Plus 50k', amount: 2700, type: 'expense', category: 'Loan', instCurrent: 6, instTotal: 24 },
+            { id: 7006, date: '2026-06', desc: 'Seal', amount: 14484, type: 'expense', category: 'Car', instCurrent: 5, instTotal: 72 },
+            { id: 7007, date: '2026-06', desc: 'Fuel', amount: 1800, type: 'expense', category: 'Car' },
+            { id: 7008, date: '2026-06', desc: 'Motorway', amount: 1200, type: 'expense', category: 'Car' },
+            { id: 7009, date: '2026-06', desc: 'Home Charger', amount: 1200, type: 'expense', category: 'Car', instCurrent: 7, instTotal: 10 },
+
+            // --- JUL 2026 ---
+            { id: 8001, date: '2026-07', desc: 'Salary', amount: 31000, type: 'income', category: 'Salary' },
+            { id: 8002, date: '2026-07', desc: 'Cash Plus 15k', amount: 546, type: 'expense', category: 'Loan' },
+            { id: 8003, date: '2026-07', desc: 'Cash Plus 20k', amount: 617, type: 'expense', category: 'Loan' },
+            { id: 8004, date: '2026-07', desc: 'Car Deposit', amount: 1100, type: 'expense', category: 'Car', instCurrent: 7, instTotal: 10 },
+            { id: 8005, date: '2026-07', desc: 'Cash Plus 50k', amount: 2700, type: 'expense', category: 'Loan', instCurrent: 7, instTotal: 24 },
+            { id: 8006, date: '2026-07', desc: 'Seal', amount: 14484, type: 'expense', category: 'Car', instCurrent: 6, instTotal: 72 },
+            { id: 8007, date: '2026-07', desc: 'Fuel', amount: 1800, type: 'expense', category: 'Car' },
+            { id: 8008, date: '2026-07', desc: 'Motorway', amount: 1200, type: 'expense', category: 'Car' },
+            { id: 8009, date: '2026-07', desc: 'Home Charger', amount: 1200, type: 'expense', category: 'Car', instCurrent: 8, instTotal: 10 },
+        ];
+
+        let transactions = JSON.parse(localStorage.getItem('myMoneyPlan')) || INITIAL_DATA;
+        let appSettings = JSON.parse(localStorage.getItem('appSettings')) || { title: 'Money Plan', theme: 'blue' };
+        
+        // --- THEME CONFIG ---
+        const themes = {
+            blue: { main: '#2563eb', light: '#3b82f6', dark: '#1d4ed8', shadow: '#bfdbfe', faint: '#dbeafe' },
+            purple: { main: '#9333ea', light: '#a855f7', dark: '#7e22ce', shadow: '#e9d5ff', faint: '#f3e8ff' },
+            green: { main: '#16a34a', light: '#22c55e', dark: '#15803d', shadow: '#bbf7d0', faint: '#dcfce7' },
+            red: { main: '#dc2626', light: '#ef4444', dark: '#b91c1c', shadow: '#fecaca', faint: '#fee2e2' },
+            orange: { main: '#ea580c', light: '#f97316', dark: '#c2410c', shadow: '#fed7aa', faint: '#ffedd5' },
+            black: { main: '#18181b', light: '#52525b', dark: '#09090b', shadow: '#e4e4e7', faint: '#f4f4f5' }
+        };
+
+        let currentMonth = '';
+        let chartInstance = null;
+
+        // --- CORE FUNCTIONS ---
+        function init() {
+            // Default to real-world current month
+            const today = new Date();
+            currentMonth = today.toISOString().slice(0, 7);
+
+            applySettings(); // Apply theme & title
+            renderMonthSelector();
+            populateDataList(); 
+            populateChartFilter();
+            updateUI();
+
+            // Listener for installment logic
+            document.getElementById('inputInstTotal').addEventListener('input', updateInstallmentHint);
+            document.getElementById('inputInstCurrent').addEventListener('input', updateInstallmentHint);
+        }
+
+        // --- SETTINGS LOGIC ---
+        function openSettings() {
+            document.getElementById('settingsTitle').value = appSettings.title;
+            renderThemeSelector();
+            document.getElementById('settingsModal').classList.remove('hidden');
+        }
+
+        function closeSettings() {
+            document.getElementById('settingsModal').classList.add('hidden');
+        }
+
+        function renderThemeSelector() {
+            const grid = document.getElementById('themeSelectorGrid');
+            grid.innerHTML = Object.keys(themes).map(key => {
+                const t = themes[key];
+                const isSelected = appSettings.theme === key;
+                return `
+                    <div onclick="selectTheme('${key}')" class="cursor-pointer flex flex-col items-center gap-1">
+                        <div class="w-10 h-10 rounded-full border-2 ${isSelected ? 'border-gray-800 scale-110' : 'border-transparent'} transition-transform" style="background-color: ${t.main}"></div>
+                        <span class="text-[10px] uppercase font-bold text-gray-400">${key}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function selectTheme(key) {
+            appSettings.theme = key;
+            renderThemeSelector(); // Re-render to show selection
+        }
+
+        function saveSettings(e) {
+            e.preventDefault();
+            const newTitle = document.getElementById('settingsTitle').value;
+            if(newTitle) appSettings.title = newTitle;
+            
+            localStorage.setItem('appSettings', JSON.stringify(appSettings));
+            applySettings();
+            closeSettings();
+            showToast("Settings saved");
+        }
+
+        function applySettings() {
+            // Update Title
+            document.getElementById('appTitleDisplay').textContent = appSettings.title;
+            document.title = appSettings.title;
+
+            // Apply Theme CSS Variables
+            const t = themes[appSettings.theme];
+            const root = document.documentElement;
+            root.style.setProperty('--theme-main', t.main);
+            root.style.setProperty('--theme-light', t.light);
+            root.style.setProperty('--theme-dark', t.dark);
+            root.style.setProperty('--theme-shadow', t.shadow);
+            root.style.setProperty('--theme-faint', t.faint);
+
+            // Re-render chart to pick up new colors
+            if (chartInstance) renderChart();
+        }
+
+
+        // --- HELPERS ---
+        function populateDataList() {
+            const dataList = document.getElementById('descSuggestions');
+            const uniqueDescs = [...new Set(transactions.map(t => t.desc))];
+            dataList.innerHTML = uniqueDescs.map(d => `<option value="${d}">`).join('');
+        }
+
+        function populateChartFilter() {
+            const select = document.getElementById('chartFilterRange');
+            const currentVal = select.value || 'last6';
+            const years = [...new Set(transactions.map(t => t.date.split('-')[0]))].sort().reverse();
+            
+            let html = `
+                <option value="last3">Last 3 Months</option>
+                <option value="last6">Last 6 Months</option>
+                <option value="last12">Last 12 Months</option>
+            `;
+            years.forEach(y => html += `<option value="${y}">${y}</option>`);
+            select.innerHTML = html;
+            
+            if ([...select.options].some(o => o.value === currentVal)) select.value = currentVal;
+            else select.value = 'last6';
+        }
+
+        function updateInstallmentHint() {
+            const current = parseInt(document.getElementById('inputInstCurrent').value) || 0;
+            const total = parseInt(document.getElementById('inputInstTotal').value) || 0;
+            const hint = document.getElementById('autoGenHint');
+            const countSpan = document.getElementById('genCount');
+            const editId = document.getElementById('editId').value;
+
+            if (!editId && total > 0 && current > 0 && total > current) {
+                const remaining = total - current;
+                countSpan.textContent = remaining;
+                hint.classList.remove('hidden');
+            } else {
+                hint.classList.add('hidden');
+            }
+        }
+
+        function autoFillCategory(input) {
+            const val = input.value.toLowerCase();
+            if(val.length < 2) return;
+            const match = transactions.slice().reverse().find(t => t.desc.toLowerCase().includes(val));
+            if (match) {
+                if(match.category) document.getElementById('inputCategory').value = match.category;
+                if(match.type) document.getElementById('inputType').value = match.type;
+            }
+        }
+
+        function updateUI() {
+            updateDashboard();
+            renderList();
+            renderChart();
+            const [y, m] = currentMonth.split('-');
+            const dateObj = new Date(y, m - 1);
+            document.getElementById('currentDateDisplay').textContent = dateObj.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            document.getElementById('filterDate').value = currentMonth;
+        }
+
+        function saveData() {
+            localStorage.setItem('myMoneyPlan', JSON.stringify(transactions));
+            populateDataList();
+            populateChartFilter();
+            updateUI();
+        }
+
+        // --- MODALS & CONFIRMATION ---
+        let confirmCallback = null;
+
+        function showConfirm(message, callback) {
+            document.getElementById('confirmMessage').textContent = message;
+            document.getElementById('confirmModal').classList.remove('hidden');
+            confirmCallback = callback;
+        }
+
+        function closeConfirmModal() {
+            document.getElementById('confirmModal').classList.add('hidden');
+            confirmCallback = null;
+        }
+
+        document.getElementById('confirmBtnAction').addEventListener('click', () => {
+            if (confirmCallback) confirmCallback();
+            closeConfirmModal();
+        });
+
+        function triggerDelete() {
+            const id = Number(document.getElementById('editId').value);
+            const item = transactions.find(t => t.id === id);
+            
+            if (item && item.instTotal > 1) {
+                // It's part of a series
+                showConfirm(`This record is part of a series (Period ${item.instCurrent}/${item.instTotal}). Delete ALL periods?`, () => {
+                    // Delete all related items in the series
+                    transactions = transactions.filter(t => 
+                        !(t.desc === item.desc && 
+                          t.type === item.type && 
+                          t.instTotal === item.instTotal &&
+                          t.amount === item.amount) // strict matching to avoid accidents
+                    );
+                    saveData();
+                    closeModal();
+                    showToast("Series deleted");
+                });
+            } else {
+                // Standard delete
+                showConfirm("Are you sure you want to delete this record?", () => {
+                    transactions = transactions.filter(t => t.id !== id);
+                    saveData();
+                    closeModal();
+                    showToast("Record deleted");
+                });
+            }
+        }
+
+        // CHANGED: Clears only the current displayed month
+        function triggerClearMonth() {
+            const [y, m] = currentMonth.split('-');
+            const dateObj = new Date(y, m - 1);
+            const monthName = dateObj.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+            showConfirm(`Delete ALL records for ${monthName}?`, () => {
+                transactions = transactions.filter(t => t.date !== currentMonth);
+                saveData();
+                showToast("Month cleared");
+            });
+        }
+
+        // --- DASHBOARD ---
+        function renderMonthSelector() {
+            // 1. Existing Data Months
+            const dataMonths = new Set(transactions.map(t => t.date));
+            
+            // 2. Ensure Current Selection is in List (Fixing potential empty state bug)
+            if (currentMonth) {
+                dataMonths.add(currentMonth);
+            }
+
+            // 3. Sort
+            const allMonths = [...dataMonths].sort();
+
+            const select = document.getElementById('monthSelector');
+            select.innerHTML = allMonths.map(m => {
+                const [y, mo] = m.split('-');
+                const date = new Date(y, mo-1);
+                const name = date.toLocaleDateString('en-US', {month:'short', year:'2-digit'});
+                return `<option value="${m}" ${m === currentMonth ? 'selected' : ''}>${name}</option>`;
+            }).join('');
+            
+            // Ensure selector shows current month
+            select.value = currentMonth;
+        }
+
+        function changeMonth() {
+            currentMonth = document.getElementById('monthSelector').value;
+            updateUI();
+        }
+
+        function updateDashboard() {
+            const monthData = transactions.filter(t => t.date === currentMonth);
+            const income = monthData.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+            const expenses = monthData.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+            const leftover = income - expenses;
+
+            // Total All Time Calc
+            const totalIncome = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+            const totalExpense = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+            const totalBalance = totalIncome - totalExpense;
+
+            document.getElementById('dashIncome').textContent = '+' + income.toLocaleString();
+            document.getElementById('dashExpenses').textContent = '-' + expenses.toLocaleString();
+            document.getElementById('dashTotalBalance').textContent = totalBalance.toLocaleString();
+            
+            const leftEl = document.getElementById('dashLeftover');
+            leftEl.textContent = leftover.toLocaleString();
+            
+            if(leftover < 0) {
+                 leftEl.classList.remove('text-white');
+                 leftEl.classList.add('text-red-200');
+            } else {
+                 leftEl.classList.remove('text-red-200');
+                 leftEl.classList.add('text-white');
+            }
+
+            const topExpenses = monthData.filter(t => t.type === 'expense').sort((a, b) => b.amount - a.amount).slice(0, 3);
+            const listEl = document.getElementById('dashboardList');
+            if (topExpenses.length === 0) {
+                listEl.innerHTML = `<div class="ios-card p-4 text-center"><p class="text-gray-400 text-sm">No expenses this month yet.</p></div>`;
+            } else {
+                listEl.innerHTML = topExpenses.map(item => `
+                    <div class="ios-card p-4 flex justify-between items-center border-l-4 border-[var(--theme-light)]/50">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-full bg-[var(--theme-faint)] flex items-center justify-center text-[var(--theme-main)]">
+                                <i class="ph ph-shopping-cart"></i>
+                            </div>
+                            <p class="font-bold text-sm text-gray-800">${item.desc}</p>
+                        </div>
+                        <span class="font-bold text-gray-700">-${item.amount.toLocaleString()}</span>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function renderChart() {
+            // Get computed style for CSS variables
+            const rootStyle = getComputedStyle(document.documentElement);
+            const themeLight = rootStyle.getPropertyValue('--theme-light').trim();
+            const colorExpense = rootStyle.getPropertyValue('--color-expense').trim();
+
+            const ctx = document.getElementById('trendChart').getContext('2d');
+            const rangeFilter = document.getElementById('chartFilterRange').value; 
+            const typeFilter = document.getElementById('chartFilterType').value;
+            const allMonths = [...new Set(transactions.map(t => t.date))].sort();
+            let displayMonths = [];
+
+            if (rangeFilter === 'last3') displayMonths = allMonths.slice(-3);
+            else if (rangeFilter === 'last6') displayMonths = allMonths.slice(-6);
+            else if (rangeFilter === 'last12') displayMonths = allMonths.slice(-12);
+            else displayMonths = allMonths.filter(m => m.startsWith(rangeFilter));
+
+            const labels = displayMonths.map(m => {
+                const [y, mo] = m.split('-');
+                return new Date(y, mo-1).toLocaleDateString('en-US', {month:'short'}); 
+            });
+
+            const incomeData = displayMonths.map(m => transactions.filter(t => t.date === m && t.type === 'income').reduce((sum, t) => sum + t.amount, 0));
+            const expenseData = displayMonths.map(m => transactions.filter(t => t.date === m && t.type === 'expense').reduce((sum, t) => sum + t.amount, 0));
+
+            const datasets = [];
+            if (typeFilter === 'both' || typeFilter === 'income') {
+                datasets.push({ label: 'Income', data: incomeData, backgroundColor: themeLight, borderRadius: 4, barPercentage: 0.7, categoryPercentage: 0.8 });
+            }
+            if (typeFilter === 'both' || typeFilter === 'expense') {
+                datasets.push({ label: 'Expenses', data: expenseData, backgroundColor: colorExpense, borderRadius: 4, barPercentage: 0.7, categoryPercentage: 0.8 });
+            }
+
+            if (chartInstance) chartInstance.destroy();
+            chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: { labels: labels, datasets: datasets },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 10 } } },
+                    scales: {
+                        y: { beginAtZero: true, grid: { color: '#f3f4f6', drawBorder: false }, ticks: { font: { size: 10 }, color: '#9ca3af', callback: function(value) { return value >= 1000 ? value/1000 + 'k' : value; } } },
+                        x: { grid: { display: false }, ticks: { font: { size: 10 }, color: '#6b7280' } }
+                    }
+                }
+            });
+        }
+
+        function applyListFilters() {
+            const dateVal = document.getElementById('filterDate').value;
+            // Check if month changed
+            if (dateVal !== currentMonth) {
+                // IMPORTANT: Ensure the selected month is in the dropdown before switching
+                const select = document.getElementById('monthSelector');
+                // Check if options contain the value
+                let exists = false;
+                for (let i = 0; i < select.options.length; i++) {
+                    if (select.options[i].value === dateVal) {
+                        exists = true;
+                        break;
+                    }
+                }
+                
+                // If it doesn't exist (because renderMonthSelector relies on currentMonth being set or data present)
+                // We set currentMonth first, then update UI (which re-renders selector)
+                currentMonth = dateVal;
+                updateUI(); 
+            } else {
+                renderList();
+            }
+        }
+
+        function renderList() {
+            const listEl = document.getElementById('fullList');
+            const typeFilter = document.getElementById('filterType').value;
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+
+            let items = transactions.filter(t => t.date === currentMonth);
+            if (typeFilter !== 'all') items = items.filter(t => t.type === typeFilter);
+            if (searchTerm) items = items.filter(t => t.desc.toLowerCase().includes(searchTerm) || (t.category && t.category.toLowerCase().includes(searchTerm)));
+
+            items.sort((a, b) => b.amount - a.amount);
+            
+            if (items.length === 0) {
+                listEl.innerHTML = `<div class="flex flex-col items-center justify-center pt-10 opacity-50"><i class="ph ph-receipt text-4xl mb-2"></i><p>No records found</p></div>`;
+                return;
+            }
+
+            listEl.innerHTML = items.map(item => `
+                <div class="bg-white p-2.5 rounded-xl shadow-sm flex justify-between items-center cursor-pointer active:scale-[0.99] transition-transform duration-100 border border-gray-100" onclick="editItem(${item.id})">
+                    <div class="flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${item.type === 'income' ? 'text-[var(--color-income)] bg-[var(--color-income-bg)]' : 'text-[var(--color-expense)] bg-[var(--color-expense-bg)]'}">
+                            <i class="ph ${item.type === 'income' ? 'ph-arrow-down-left' : 'ph-arrow-up-right'} text-lg font-bold"></i>
+                        </div>
+                        <div class="min-w-0">
+                            <p class="font-bold text-gray-800 text-sm truncate">${item.desc}</p>
+                            <div class="flex flex-wrap items-center gap-1.5 mt-0.5">
+                                ${item.category ? `<span class="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-md font-medium truncate max-w-[80px]">${item.category}</span>` : ''}
+                                ${item.instTotal ? `<span class="text-[10px] bg-[var(--theme-faint)] text-[var(--theme-main)] px-1.5 py-0.5 rounded-md font-bold">${item.instCurrent}/${item.instTotal}</span>` : ''}
+                                <span class="text-[10px] text-gray-400 capitalize font-medium">${item.type}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-right flex-shrink-0 pl-2">
+                        <p class="font-bold text-base ${item.type === 'income' ? 'text-[var(--color-income)]' : 'text-[var(--color-expense)]'}">
+                            ${item.type === 'expense' ? '-' : '+'}${item.amount.toLocaleString()}
+                        </p>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('[id^="view-"]').forEach(el => el.classList.add('hidden'));
+            document.getElementById(`view-${tab}`).classList.remove('hidden');
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active', 'text-gray-400'));
+            const navId = tab === 'dashboard' ? 'nav-dash' : 'nav-list';
+            document.getElementById(navId).classList.add('active');
+            if(tab === 'list') renderList();
+            document.getElementById('mainContainer').scrollTop = 0;
+        }
+
+        function openModal(id = null) {
+            const modal = document.getElementById('modal');
+            modal.classList.remove('hidden');
+            document.getElementById('editId').value = '';
+            document.getElementById('inputDate').value = currentMonth;
+            document.getElementById('inputDesc').value = '';
+            document.getElementById('inputAmount').value = '';
+            document.getElementById('inputCategory').value = '';
+            document.getElementById('inputInstCurrent').value = '';
+            document.getElementById('inputInstTotal').value = '';
+            document.getElementById('inputType').value = 'expense';
+            document.getElementById('autoGenHint').classList.add('hidden');
+            const deleteBtn = document.getElementById('deleteBtn');
+            const modalTitle = document.getElementById('modalTitle');
+
+            if (id) {
+                const item = transactions.find(t => t.id === id);
+                if (item) {
+                    document.getElementById('editId').value = item.id;
+                    document.getElementById('inputDate').value = item.date;
+                    document.getElementById('inputDesc').value = item.desc;
+                    document.getElementById('inputCategory').value = item.category || '';
+                    document.getElementById('inputAmount').value = item.amount;
+                    document.getElementById('inputType').value = item.type;
+                    document.getElementById('inputInstCurrent').value = item.instCurrent || '';
+                    document.getElementById('inputInstTotal').value = item.instTotal || '';
+                }
+                deleteBtn.classList.remove('hidden'); 
+                modalTitle.textContent = "Edit Record";
+            } else {
+                deleteBtn.classList.add('hidden');
+                modalTitle.textContent = "Add New Record";
+            }
+        }
+
+        function closeModal() { document.getElementById('modal').classList.add('hidden'); }
+
+        function saveTransaction(e) {
+            e.preventDefault();
+            const id = document.getElementById('editId').value;
+            const date = document.getElementById('inputDate').value;
+            const desc = document.getElementById('inputDesc').value;
+            const category = document.getElementById('inputCategory').value;
+            const amount = parseFloat(document.getElementById('inputAmount').value);
+            const type = document.getElementById('inputType').value;
+            const instCurrent = parseInt(document.getElementById('inputInstCurrent').value) || null;
+            const instTotal = parseInt(document.getElementById('inputInstTotal').value) || null;
+
+            if (!id) {
+                const newId = Date.now();
+                transactions.push({ id: newId, date, desc, category, amount, type, instCurrent, instTotal });
+                if (instCurrent && instTotal && instTotal > instCurrent) {
+                    let nextMonthDate = new Date(date + '-01'); 
+                    let currentCount = instCurrent;
+                    while (currentCount < instTotal) {
+                        currentCount++;
+                        nextMonthDate.setMonth(nextMonthDate.getMonth() + 1);
+                        const y = nextMonthDate.getFullYear();
+                        const m = String(nextMonthDate.getMonth() + 1).padStart(2, '0');
+                        transactions.push({
+                            id: Date.now() + currentCount, date: `${y}-${m}`, desc: desc, category: category, amount: amount, type: type, instCurrent: currentCount, instTotal: instTotal
+                        });
+                    }
+                    showToast(`Generated ${instTotal - instCurrent} future records!`);
+                }
+            } else {
+                const idx = transactions.findIndex(t => t.id == id);
+                if (idx > -1) transactions[idx] = { id: Number(id), date, desc, category, amount, type, instCurrent, instTotal };
+            }
+            currentMonth = date;
+            closeModal();
+            saveData();
+            renderMonthSelector();
+            if(!id && (!instTotal || instTotal <= instCurrent)) showToast("Record saved");
+        }
+
+        function editItem(id) { openModal(id); }
+
+        function showToast(msg = "Saved successfully!") {
+            const t = document.getElementById('toast');
+            t.querySelector('span').textContent = msg;
+            t.classList.remove('-translate-y-24');
+            t.classList.add('translate-y-4');
+            setTimeout(() => { t.classList.remove('translate-y-4'); t.classList.add('-translate-y-24'); }, 3000);
+        }
+
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>
