@@ -24,7 +24,7 @@
             font-family: 'Sarabun', sans-serif;
             -webkit-tap-highlight-color: transparent;
             min-height: 100vh;
-            background-color: #f3f4f6;
+            background-color: var(--theme-bg); /* Changed to variable */
         }
 
         /* --- DYNAMIC THEME VARIABLES --- */
@@ -35,6 +35,9 @@
             --theme-dark: #1d4ed8;   /* 700 */
             --theme-shadow: #bfdbfe; /* 200 */
             --theme-faint: #dbeafe;  /* 100 */
+            
+            /* Background Variable */
+            --theme-bg: #f3f4f6;
 
             /* Semantic Colors (Income/Expense) */
             --color-income: #16a34a;    /* green-600 */
@@ -184,7 +187,7 @@
         <!-- LIST VIEW -->
         <div id="view-list" class="hidden space-y-3 animate-fade-in">
             <!-- Sticky Filter Header -->
-            <div class="sticky top-0 bg-[#f3f4f6] z-10 pt-1 pb-2 space-y-2">
+            <div class="sticky top-0 z-10 pt-1 pb-2 space-y-2" style="background-color: var(--theme-bg);">
                 <div class="flex justify-between items-center">
                     <h2 class="text-xl font-bold text-gray-900">Records</h2>
                     <!-- Add New Button -->
@@ -241,7 +244,7 @@
     <!-- SETTINGS MODAL -->
     <div id="settingsModal" class="fixed inset-0 z-50 hidden">
         <div class="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onclick="closeSettings()"></div>
-        <div class="absolute bottom-0 sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 w-full sm:w-80 bg-white rounded-t-3xl sm:rounded-3xl p-5 animate-slide-up shadow-2xl">
+        <div class="absolute bottom-0 sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 w-full sm:w-80 bg-white rounded-t-3xl sm:rounded-3xl p-5 animate-slide-up shadow-2xl max-h-[90vh] overflow-y-auto">
             <div class="flex justify-between items-center mb-5">
                 <h3 class="text-lg font-bold text-gray-900">App Settings</h3>
                 <button onclick="closeSettings()" class="bg-gray-100 p-1.5 rounded-full text-gray-500 hover:bg-gray-200 transition-colors">
@@ -264,6 +267,15 @@
                     </div>
                 </div>
 
+                <!-- Background Color Select -->
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-2 ml-1">Background Color</label>
+                    <div class="flex items-center gap-3">
+                        <input type="color" id="bgColorPicker" class="w-10 h-10 rounded-lg cursor-pointer border-none" value="#f3f4f6" oninput="document.getElementById('bgColorDisplay').textContent = this.value">
+                        <span id="bgColorDisplay" class="text-sm font-medium text-gray-600 uppercase">#f3f4f6</span>
+                    </div>
+                </div>
+
                 <!-- CSV Import Section -->
                 <div>
                     <label class="block text-xs font-bold text-gray-500 uppercase mb-2 ml-1">Import Data</label>
@@ -273,7 +285,7 @@
                             <i class="ph ph-upload-simple text-lg"></i> Import CSV
                         </button>
                         <!-- Updated Help Text -->
-                        <p class="text-[10px] text-gray-400 mt-1 ml-1">Format: YYYY-MM; Subject; Price (e.g. 2025-12; Car; -3000)</p>
+                        <p class="text-[10px] text-gray-400 mt-1 ml-1">Format: YYYY-MM, Subject, Price (e.g. 2025-12,"Salary",31000)</p>
                     </div>
                 </div>
 
@@ -383,11 +395,15 @@
 
     <script>
         // --- DATA INITIALIZATION ---
-        const INITIAL_DATA = [
-];
+        const INITIAL_DATA = [];
 
         let transactions = JSON.parse(localStorage.getItem('myMoneyPlan')) || INITIAL_DATA;
-        let appSettings = JSON.parse(localStorage.getItem('appSettings')) || { title: 'Money Plan', theme: 'blue', customColor: '#2563eb' };
+        let appSettings = JSON.parse(localStorage.getItem('appSettings')) || { 
+            title: 'Money Plan', 
+            theme: 'blue', 
+            customColor: '#2563eb',
+            bgColor: '#f3f4f6'
+        };
         
         // --- THEME CONFIG ---
         const themes = {
@@ -454,6 +470,8 @@
         // --- SETTINGS LOGIC ---
         function openSettings() {
             document.getElementById('settingsTitle').value = appSettings.title;
+            document.getElementById('bgColorPicker').value = appSettings.bgColor || '#f3f4f6';
+            document.getElementById('bgColorDisplay').textContent = appSettings.bgColor || '#f3f4f6';
             renderThemeSelector();
             document.getElementById('settingsModal').classList.remove('hidden');
         }
@@ -509,6 +527,10 @@
             const newTitle = document.getElementById('settingsTitle').value;
             if(newTitle) appSettings.title = newTitle;
             
+            // Save BG Color
+            const newBg = document.getElementById('bgColorPicker').value;
+            if(newBg) appSettings.bgColor = newBg;
+            
             localStorage.setItem('appSettings', JSON.stringify(appSettings));
             applySettings();
             closeSettings();
@@ -543,6 +565,9 @@
             root.style.setProperty('--theme-dark', t.dark);
             root.style.setProperty('--theme-shadow', t.shadow);
             root.style.setProperty('--theme-faint', t.faint);
+            
+            // Apply Background
+            root.style.setProperty('--theme-bg', appSettings.bgColor || '#f3f4f6');
 
             // Re-render chart to pick up new colors
             if (chartInstance) renderChart();
@@ -564,28 +589,33 @@
                     const trimmedLine = line.trim();
                     if (!trimmedLine || trimmedLine.toLowerCase().includes('month') || trimmedLine.toLowerCase().includes('subject')) return;
                     
-                    // Support both semicolon and comma, but semicolon is preferred based on your request
-                    const delimiter = trimmedLine.includes(';') ? ';' : ',';
-                    const parts = trimmedLine.split(delimiter);
+                    // Split by comma, respecting quotes
+                    // Regex explained: Match quotes with anything inside OR non-quotes/non-commas, followed by comma or end of line
+                    const parts = trimmedLine.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g);
                     
-                    if (parts.length >= 3) {
+                    if (parts && parts.length >= 3) {
                         let dateStr = parts[0].trim();
-                        const desc = parts[1].trim();
-                        // Remove any quotes if present and parse
-                        const priceStr = parts[2].trim().replace(/["']/g, '');
+                        // Remove quotes from description
+                        const desc = parts[1].trim().replace(/^["']|["']$/g, '');
+                        // Remove quotes and commas from price before parsing
+                        const priceStr = parts[2].trim().replace(/^["']|["']$/g, '').replace(/,/g, '');
                         const price = parseFloat(priceStr);
 
                         // Validate/Parse Date
                         let validDate = null;
 
-                        // Case 1: Standard YYYY-MM (e.g. 2025-12)
-                        if (/^\d{4}-\d{2}$/.test(dateStr)) {
-                            validDate = dateStr;
+                        // Check for YYYY-M format (e.g. 2026-1) and fix to YYYY-MM (2026-01)
+                        if (/^\d{4}-\d{1,2}$/.test(dateStr)) {
+                            const dateParts = dateStr.split('-');
+                            if(dateParts.length === 2) {
+                                const y = dateParts[0];
+                                const m = dateParts[1].padStart(2, '0');
+                                validDate = `${y}-${m}`;
+                            }
                         } 
-                        // Case 2: Short Month Name (e.g. Dec) -> Defaults to current year
+                        // Fallback for Short Month Name (e.g. Dec) -> Defaults to current year
                         else if (dateStr.length <= 3) {
                             const monthMap = { 'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12' };
-                            // Capitalize first letter just in case
                             const formattedMonth = dateStr.charAt(0).toUpperCase() + dateStr.slice(1).toLowerCase();
                             const m = monthMap[formattedMonth];
                             if (m) {
@@ -613,7 +643,7 @@
                     closeSettings();
                     showToast(`Imported ${count} records!`);
                 } else {
-                    alert("No valid records found.\nPlease use format: 2025-12; Car wash; -3000");
+                    alert("No valid records found.\nPlease check format: 2025-12, \"Salary\", 31000");
                 }
             };
             reader.readAsText(file);
